@@ -22,13 +22,14 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 //////////////////////////////////////////////////////////////////////////
 // AUdemyMGameCharacter
 
-AUdemyMGameCharacter::AUdemyMGameCharacter():
+AUdemyMGameCharacter::AUdemyMGameCharacter() :
 	createSessionComplateDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::onCreateSessionComplate)),
-	findSessionComplateDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this,&ThisClass::onFindSessionComplate))
+	findSessionComplateDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::onFindSessionComplate)),
+	joinSessionComplateDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::onJoinSessionComplate))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
+
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -65,10 +66,10 @@ AUdemyMGameCharacter::AUdemyMGameCharacter():
 	IOnlineSubsystem* onlineSubsystem = IOnlineSubsystem::Get();
 	if (onlineSubsystem)
 	{
-		OnlineSessionInterface= onlineSubsystem->GetSessionInterface();
+		OnlineSessionInterface = onlineSubsystem->GetSessionInterface();
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 20.f,FColor::Blue,FString::Printf(TEXT("Online Subsystem Name: %s"),*onlineSubsystem->GetSubsystemName().ToString()));
+			GEngine->AddOnScreenDebugMessage(-1, 20.f, FColor::Blue, FString::Printf(TEXT("Online Subsystem Name: %s"), *onlineSubsystem->GetSubsystemName().ToString()));
 		}
 	}
 }
@@ -84,13 +85,13 @@ void AUdemyMGameCharacter::OpenLobby()
 	UWorld* world = GetWorld();
 	if (world)
 	{
-		world->ServerTravel("Game/ ThirdPerson / Maps / LobbyMap?listen");
+		world->ServerTravel("Game/ThirdPerson/Maps/LobbyMap?listen");
 	}
 }
 
 void AUdemyMGameCharacter::CallOpenLevel(const FString& Adress)
 {
-	UGameplayStatics::OpenLevel(this,*Adress);
+	UGameplayStatics::OpenLevel(this, *Adress);
 }
 
 void AUdemyMGameCharacter::CallClientTravel(const FString& Adress)
@@ -98,7 +99,7 @@ void AUdemyMGameCharacter::CallClientTravel(const FString& Adress)
 	APlayerController* playerController = GetGameInstance()->GetFirstLocalPlayerController();
 	if (playerController)
 	{
-		playerController->ClientTravel(Adress,ETravelType::TRAVEL_Absolute);
+		playerController->ClientTravel(Adress, ETravelType::TRAVEL_Absolute);
 	}
 }
 
@@ -109,7 +110,7 @@ void AUdemyMGameCharacter::createGameSession()
 		return;
 	}
 	auto existingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
-	if (existingSession!=nullptr)
+	if (existingSession != nullptr)
 	{
 		OnlineSessionInterface->DestroySession(NAME_GameSession);
 	}
@@ -118,13 +119,13 @@ void AUdemyMGameCharacter::createGameSession()
 
 	sessionSettings->bIsLANMatch = false;
 	sessionSettings->NumPublicConnections = 4;
-	sessionSettings->bAllowJoinInProgress=true;
-	sessionSettings->bAllowJoinViaPresence=true;
-	sessionSettings->bShouldAdvertise=true;
-	sessionSettings->bUsesPresence=true;
+	sessionSettings->bAllowJoinInProgress = true;
+	sessionSettings->bAllowJoinViaPresence = true;
+	sessionSettings->bShouldAdvertise = true;
+	sessionSettings->bUsesPresence = true;
 	sessionSettings->bUseLobbiesIfAvailable = true;
 
-	sessionSettings->Set(FName("MatchType"),FString("FreeForAll"),EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	sessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	const ULocalPlayer* localPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 	OnlineSessionInterface->CreateSession(*localPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *sessionSettings);
@@ -140,11 +141,19 @@ void AUdemyMGameCharacter::onCreateSessionComplate(FName SessionName, bool bWasS
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, FString::Printf(TEXT("create session : %s"), *SessionName.ToString()));
 		}
+
+		UWorld* world = GetWorld();
+		if (world)
+		{
+			//D:/Unreal_Engine_Projects/UnrealEngineMultiplayerPlugin/Content/ThirdPerson/Maps/LobbyMap.umap
+			world->ServerTravel("/Game/ThirdPerson/Maps/LobbyMap?listen");//Lobby haritasýnýn yolunu verdik
+
+		}
 	}
 	else {
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Red,TEXT("Failed to create session!"));
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Red, TEXT("Session Baslatilamadi!"));
 		}
 	}
 }
@@ -165,18 +174,62 @@ void AUdemyMGameCharacter::joinGameSession()
 	sessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
 
 	const ULocalPlayer* localPlayer = GetWorld()->GetFirstLocalPlayerFromController();
-	OnlineSessionInterface->FindSessions(*localPlayer->GetPreferredUniqueNetId(),sessionSearch.ToSharedRef());
+	OnlineSessionInterface->FindSessions(*localPlayer->GetPreferredUniqueNetId(), sessionSearch.ToSharedRef());
 }
 
 void AUdemyMGameCharacter::onFindSessionComplate(bool bWasSuccesful)
 {
+	if (!OnlineSessionInterface.IsValid())
+	{
+		return;
+	}
 	for (auto result : sessionSearch->SearchResults)
 	{
 		FString Id = result.GetSessionIdStr();
 		FString User = result.Session.OwningUserName;
+		FString matchType;
+		result.Session.SessionSettings.Get(FName("MatchType"), matchType);
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,FString::Printf(TEXT("Id : %s , User : %s "),*Id,*User));
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, FString::Printf(TEXT("Id : %s , User : %s "), *Id, *User));
+		}
+		if (matchType == FString("FreeForAll"))
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Green, FString::Printf(TEXT("Maca katiliyor : %s "), *matchType));
+			}
+
+			OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(joinSessionComplateDelegate);
+
+			const ULocalPlayer* localPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+			OnlineSessionInterface->JoinSession(*localPlayer->GetPreferredUniqueNetId(), NAME_GameSession, result);
+		}
+	}
+
+}
+
+void AUdemyMGameCharacter::onJoinSessionComplate(FName SessionName, EOnJoinSessionCompleteResult::Type result)
+{
+	if (!OnlineSessionInterface.IsValid())
+	{
+		return;
+	}
+
+	FString address;
+	if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, address))
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 15.f, FColor::Yellow, FString::Printf(TEXT("Baglanti metni : %s "), *address));
+		}
+
+		APlayerController* playerController = GetGameInstance()->GetFirstLocalPlayerController();
+
+		if (playerController)
+		{
+			playerController->ClientTravel(address, ETravelType::TRAVEL_Absolute);
+
 		}
 	}
 
@@ -195,10 +248,10 @@ void AUdemyMGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
 		}
 	}
-	
+
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
+
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
@@ -228,7 +281,7 @@ void AUdemyMGameCharacter::Move(const FInputActionValue& Value)
 
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
+
 		// get right vector 
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 

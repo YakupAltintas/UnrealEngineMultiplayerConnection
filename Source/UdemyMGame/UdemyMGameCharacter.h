@@ -94,10 +94,12 @@ protected:
 
 	void onCreateSessionComplate(FName SessionName,bool bWasSuccesful);
 	void onFindSessionComplate(bool bWasSuccesful);
+	void onJoinSessionComplate(FName SessionName, EOnJoinSessionCompleteResult::Type result);
 
 private:
 	FOnCreateSessionCompleteDelegate createSessionComplateDelegate;
 	FOnFindSessionsCompleteDelegate findSessionComplateDelegate;
 	TSharedPtr<FOnlineSessionSearch> sessionSearch;
+	FOnJoinSessionCompleteDelegate joinSessionComplateDelegate;
 };
 
