@@ -13,6 +13,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
+#include "Online/OnlineSessionNames.h"
 
 
 
@@ -22,7 +23,8 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 // AUdemyMGameCharacter
 
 AUdemyMGameCharacter::AUdemyMGameCharacter():
-	createSessionCreateDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::onCreateGameSessionComplate))
+	createSessionComplateDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::onCreateSessionComplate)),
+	findSessionComplateDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this,&ThisClass::onFindSessionComplate))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -111,7 +113,7 @@ void AUdemyMGameCharacter::createGameSession()
 	{
 		OnlineSessionInterface->DestroySession(NAME_GameSession);
 	}
-	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(createSessionCreateDelegate);
+	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(createSessionComplateDelegate);
 	TSharedPtr<FOnlineSessionSettings> sessionSettings = MakeShareable(new FOnlineSessionSettings());
 
 	sessionSettings->bIsLANMatch = false;
@@ -120,13 +122,17 @@ void AUdemyMGameCharacter::createGameSession()
 	sessionSettings->bAllowJoinViaPresence=true;
 	sessionSettings->bShouldAdvertise=true;
 	sessionSettings->bUsesPresence=true;
+	sessionSettings->bUseLobbiesIfAvailable = true;
 
+	sessionSettings->Set(FName("MatchType"),FString("FreeForAll"),EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
 	const ULocalPlayer* localPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 	OnlineSessionInterface->CreateSession(*localPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *sessionSettings);
 }
 
-void AUdemyMGameCharacter::onCreateGameSessionComplate(FName SessionName, bool bWasSuccesful)
+
+
+void AUdemyMGameCharacter::onCreateSessionComplate(FName SessionName, bool bWasSuccesful)
 {
 	if (bWasSuccesful)
 	{
@@ -141,6 +147,39 @@ void AUdemyMGameCharacter::onCreateGameSessionComplate(FName SessionName, bool b
 			GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Red,TEXT("Failed to create session!"));
 		}
 	}
+}
+//#define SEARCH_PRESENCE FName(TEXT("PRESENCESEARCH"))
+void AUdemyMGameCharacter::joinGameSession()
+{
+	if (!OnlineSessionInterface.IsValid())
+	{
+		return;
+	}
+
+	OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(findSessionComplateDelegate);
+
+	sessionSearch = MakeShareable(new FOnlineSessionSearch());
+	sessionSearch->MaxSearchResults = 10000;
+	sessionSearch->bIsLanQuery = false;
+	//SEARCH_PRESENCE -> buradan aldýk aþaðýdaki ismi
+	sessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+	const ULocalPlayer* localPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	OnlineSessionInterface->FindSessions(*localPlayer->GetPreferredUniqueNetId(),sessionSearch.ToSharedRef());
+}
+
+void AUdemyMGameCharacter::onFindSessionComplate(bool bWasSuccesful)
+{
+	for (auto result : sessionSearch->SearchResults)
+	{
+		FString Id = result.GetSessionIdStr();
+		FString User = result.Session.OwningUserName;
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1,15.f,FColor::Green,FString::Printf(TEXT("Id : %s , User : %s "),*Id,*User));
+		}
+	}
+
 }
 
 //////////////////////////////////////////////////////////////////////////
